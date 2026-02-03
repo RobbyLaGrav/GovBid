@@ -1,0 +1,1366 @@
+// =============================================================================
+// GovBid Pro - Prisma Database Schema
+// =============================================================================
+// This schema defines all data models for the GovBid Pro platform.
+// Database: PostgreSQL
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum UserRole {
+  ADMIN
+  OWNER
+  MANAGER
+  MEMBER
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum SubscriptionTier {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  PAUSED
+}
+
+enum ContractStatus {
+  DISCOVERED
+  REVIEWING
+  PREPARING_BID
+  BID_SUBMITTED
+  AWARDED
+  NOT_AWARDED
+  CANCELLED
+  ARCHIVED
+}
+
+enum ContractType {
+  FEDERAL
+  STATE
+  LOCAL
+  COMMERCIAL
+  SUBCONTRACT
+}
+
+enum SetAsideType {
+  NONE
+  SMALL_BUSINESS
+  WOSB
+  EDWOSB
+  SDVOSB
+  HUBZONE
+  EIGHT_A
+  VETERAN_OWNED
+  MINORITY_OWNED
+}
+
+enum BidStatus {
+  DRAFT
+  IN_PROGRESS
+  UNDER_REVIEW
+  APPROVED
+  SUBMITTED
+  WITHDRAWN
+}
+
+enum PricingTier {
+  AGGRESSIVE
+  COMPETITIVE
+  PREMIUM
+}
+
+enum NotificationType {
+  CONTRACT_MATCH
+  DEADLINE_REMINDER
+  BID_STATUS
+  AMENDMENT
+  AWARD_ANNOUNCEMENT
+  TEAM_MENTION
+  APPROVAL_REQUEST
+  SYSTEM
+}
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+  IN_APP
+  SMS
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+enum EventType {
+  DEADLINE
+  MEETING
+  REMINDER
+  MILESTONE
+  SUBMISSION
+  QA_PERIOD
+}
+
+enum NAICSCode {
+  CODE_111110 // Soybean Farming
+  CODE_236220 // Commercial Building Construction
+  CODE_238220 // Plumbing and HVAC
+  CODE_334111 // Computer Manufacturing
+  CODE_511210 // Software Publishers
+  CODE_518210 // Data Processing
+  CODE_541330 // Engineering Services
+  CODE_541511 // Custom Programming
+  CODE_541512 // Computer Systems Design
+  CODE_541519 // Other Computer Services
+  CODE_541611 // Admin Management Consulting
+  CODE_541690 // Other Scientific Consulting
+  CODE_561210 // Facilities Support
+  CODE_561720 // Janitorial Services
+  CODE_611430 // Professional Training
+  OTHER
+}
+
+// =============================================================================
+// USER & AUTHENTICATION MODELS
+// =============================================================================
+
+model User {
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  passwordHash          String?
+  firstName             String
+  lastName              String
+  phone                 String?
+  avatarUrl             String?
+  role                  UserRole  @default(MEMBER)
+  status                UserStatus @default(PENDING_VERIFICATION)
+  emailVerified         Boolean   @default(false)
+  emailVerifiedAt       DateTime?
+  lastLoginAt           DateTime?
+  lastActivityAt        DateTime?
+  failedLoginAttempts   Int       @default(0)
+  lockedUntil           DateTime?
+  twoFactorEnabled      Boolean   @default(false)
+  twoFactorSecret       String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  organizationId        String?
+  organization          Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  sessions              Session[]
+  refreshTokens         RefreshToken[]
+  notifications         Notification[]
+  notificationPrefs     NotificationPreference?
+  createdContracts      SavedContract[]
+  bids                  Bid[] @relation("BidCreator")
+  assignedBids          Bid[] @relation("BidAssignee")
+  comments              Comment[]
+  approvalRequests      ApprovalRequest[] @relation("ApprovalRequester")
+  approvalResponses     ApprovalRequest[] @relation("ApprovalResponder")
+  activityLogs          ActivityLog[]
+  calendarEvents        CalendarEvent[]
+  savedSearches         SavedSearch[]
+
+  @@index([email])
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id           String   @id @default(cuid())
+  email        String
+  token        String   @unique
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
+  @@map("password_resets")
+}
+
+model EmailVerification {
+  id           String   @id @default(cuid())
+  email        String
+  token        String   @unique
+  expiresAt    DateTime
+  verifiedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
+  @@map("email_verifications")
+}
+
+// =============================================================================
+// ORGANIZATION & BUSINESS PROFILE MODELS
+// =============================================================================
+
+model Organization {
+  id                    String    @id @default(cuid())
+  name                  String
+  legalName             String?
+  dbaName               String?
+  description           String?   @db.Text
+  website               String?
+  logoUrl               String?
+
+  // Business Identifiers
+  uei                   String?   @unique  // Unique Entity ID (replaced DUNS)
+  cageCode              String?   @unique  // Commercial and Government Entity Code
+  ein                   String?            // Employer Identification Number
+  dunsNumber            String?            // Legacy DUNS number
+
+  // Contact Information
+  primaryEmail          String
+  primaryPhone          String?
+  fax                   String?
+
+  // Address
+  addressLine1          String?
+  addressLine2          String?
+  city                  String?
+  state                 String?
+  zipCode               String?
+  country               String?   @default("USA")
+
+  // Business Details
+  yearEstablished       Int?
+  employeeCount         Int?
+  annualRevenue         Decimal?  @db.Decimal(15, 2)
+  businessType          String?   // LLC, Corporation, Sole Proprietor, etc.
+
+  // SAM.gov Registration
+  samRegistered         Boolean   @default(false)
+  samRegistrationDate   DateTime?
+  samExpirationDate     DateTime?
+  samStatus             String?
+
+  // Subscription
+  subscriptionTier      SubscriptionTier   @default(FREE)
+  subscriptionStatus    SubscriptionStatus @default(ACTIVE)
+  trialEndsAt           DateTime?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  users                 User[]
+  businessProfile       BusinessProfile?
+  certifications        Certification[]
+  naicsCodes            OrganizationNAICS[]
+  pscCodes              OrganizationPSC[]
+  pastPerformances      PastPerformance[]
+  savedContracts        SavedContract[]
+  bids                  Bid[]
+  subscriptions         Subscription[]
+  payments              Payment[]
+  teamInvitations       TeamInvitation[]
+  activityLogs          ActivityLog[]
+  apiKeys               ApiKey[]
+
+  @@index([uei])
+  @@index([cageCode])
+  @@index([name])
+  @@map("organizations")
+}
+
+model BusinessProfile {
+  id                    String    @id @default(cuid())
+  organizationId        String    @unique
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Capabilities Statement
+  coreCompetencies      String[]
+  differentiators       String[]
+  pastPerformanceSummary String?  @db.Text
+
+  // Geographic Coverage
+  serviceAreas          String[]  // States/regions served
+  primaryWorkLocation   String?
+  willingToRelocate     Boolean   @default(false)
+
+  // Contract Preferences
+  preferredContractTypes ContractType[]
+  preferredSetAsides     SetAsideType[]
+  minContractValue      Decimal?  @db.Decimal(15, 2)
+  maxContractValue      Decimal?  @db.Decimal(15, 2)
+  preferredDuration     String?   // e.g., "1-3 years"
+
+  // Keywords for Matching
+  industryKeywords      String[]
+  skillKeywords         String[]
+
+  // AI Matching Preferences
+  matchingEnabled       Boolean   @default(true)
+  matchThreshold        Float     @default(0.7)  // Minimum match score
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("business_profiles")
+}
+
+model Certification {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name                  String    // e.g., "8(a)", "HUBZone", "WOSB"
+  certifyingAgency      String?   // e.g., "SBA", "State of California"
+  certificationNumber   String?
+  issueDate             DateTime?
+  expirationDate        DateTime?
+  documentUrl           String?
+  verified              Boolean   @default(false)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([organizationId])
+  @@index([name])
+  @@map("certifications")
+}
+
+model OrganizationNAICS {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  code                  String    // NAICS code (e.g., "541511")
+  description           String?
+  isPrimary             Boolean   @default(false)
+
+  createdAt             DateTime  @default(now())
+
+  @@unique([organizationId, code])
+  @@index([code])
+  @@map("organization_naics")
+}
+
+model OrganizationPSC {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  code                  String    // Product Service Code
+  description           String?
+
+  createdAt             DateTime  @default(now())
+
+  @@unique([organizationId, code])
+  @@index([code])
+  @@map("organization_psc")
+}
+
+// =============================================================================
+// CONTRACT MODELS
+// =============================================================================
+
+model Contract {
+  id                    String    @id @default(cuid())
+
+  // Source Information
+  sourceId              String    // ID from the source system (SAM.gov, etc.)
+  source                String    // "SAM_GOV", "STATE_PORTAL", "COMMERCIAL"
+  sourceUrl             String?   @db.Text
+
+  // Basic Information
+  title                 String    @db.Text
+  description           String?   @db.Text
+  synopsis              String?   @db.Text
+
+  // Contract Details
+  solicitationNumber    String?
+  contractNumber        String?
+  contractType          ContractType @default(FEDERAL)
+  setAsideType          SetAsideType @default(NONE)
+
+  // Classification
+  naicsCode             String?
+  naicsDescription      String?
+  pscCode               String?
+  pscDescription        String?
+
+  // Contracting Office
+  agency                String?
+  subAgency             String?
+  office                String?
+  contactName           String?
+  contactEmail          String?
+  contactPhone          String?
+
+  // Location
+  placeOfPerformance    String?
+  city                  String?
+  state                 String?
+  zipCode               String?
+  country               String?   @default("USA")
+
+  // Financial
+  estimatedValue        Decimal?  @db.Decimal(15, 2)
+  minValue              Decimal?  @db.Decimal(15, 2)
+  maxValue              Decimal?  @db.Decimal(15, 2)
+  awardAmount           Decimal?  @db.Decimal(15, 2)
+
+  // Dates
+  postedDate            DateTime?
+  responseDeadline      DateTime?
+  qaDeadline            DateTime? // Questions & Answers deadline
+  awardDate             DateTime?
+  performanceStartDate  DateTime?
+  performanceEndDate    DateTime?
+  archiveDate           DateTime?
+
+  // Status
+  isActive              Boolean   @default(true)
+  isCancelled           Boolean   @default(false)
+
+  // AI Analysis
+  aiSummary             String?   @db.Text
+  aiMatchScore          Float?    // Overall match score
+  aiKeyRequirements     Json?     // Extracted key requirements
+  aiRecommendations     Json?     // AI recommendations
+  lastAnalyzedAt        DateTime?
+
+  // Metadata
+  rawData               Json?     // Original raw data from source
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  requirements          ContractRequirement[]
+  attachments           ContractAttachment[]
+  amendments            ContractAmendment[]
+  savedBy               SavedContract[]
+  bids                  Bid[]
+  calendarEvents        CalendarEvent[]
+
+  @@unique([sourceId, source])
+  @@index([solicitationNumber])
+  @@index([contractType])
+  @@index([setAsideType])
+  @@index([naicsCode])
+  @@index([responseDeadline])
+  @@index([postedDate])
+  @@index([isActive])
+  @@map("contracts")
+}
+
+model ContractRequirement {
+  id                    String    @id @default(cuid())
+  contractId            String
+  contract              Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  category              String?   // "TECHNICAL", "MANAGEMENT", "PAST_PERFORMANCE", etc.
+  requirement           String    @db.Text
+  isMandatory           Boolean   @default(true)
+  priority              Int       @default(0)
+
+  // AI Extraction metadata
+  confidence            Float?    // AI confidence score
+  sourceSection         String?   // Where in the document this was found
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([contractId])
+  @@index([category])
+  @@map("contract_requirements")
+}
+
+model ContractAttachment {
+  id                    String    @id @default(cuid())
+  contractId            String
+  contract              Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  name                  String
+  description           String?
+  fileType              String?   // MIME type
+  fileSize              Int?      // Size in bytes
+  url                   String    @db.Text
+  s3Key                 String?   // If stored in S3
+
+  // Processing status
+  isProcessed           Boolean   @default(false)
+  processedAt           DateTime?
+  extractedText         String?   @db.Text
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([contractId])
+  @@map("contract_attachments")
+}
+
+model ContractAmendment {
+  id                    String    @id @default(cuid())
+  contractId            String
+  contract              Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  amendmentNumber       String
+  title                 String?
+  description           String?   @db.Text
+  effectiveDate         DateTime?
+  newDeadline           DateTime?
+  url                   String?   @db.Text
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([contractId])
+  @@map("contract_amendments")
+}
+
+model SavedContract {
+  id                    String    @id @default(cuid())
+  contractId            String
+  contract              Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status                ContractStatus @default(DISCOVERED)
+  matchScore            Float?    // AI match score for this org
+  notes                 String?   @db.Text
+  tags                  String[]
+  priority              Int       @default(0)  // 0=Normal, 1=High, 2=Urgent
+
+  // Tracking
+  bidDecision           String?   // "WILL_BID", "NO_BID", "UNDECIDED"
+  bidDecisionReason     String?   @db.Text
+  bidDecisionAt         DateTime?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([contractId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+  @@map("saved_contracts")
+}
+
+// =============================================================================
+// BID & PROPOSAL MODELS
+// =============================================================================
+
+model Bid {
+  id                    String    @id @default(cuid())
+  contractId            String
+  contract              Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Ownership
+  createdById           String
+  createdBy             User      @relation("BidCreator", fields: [createdById], references: [id])
+  assignedToId          String?
+  assignedTo            User?     @relation("BidAssignee", fields: [assignedToId], references: [id])
+
+  // Bid Details
+  title                 String
+  status                BidStatus @default(DRAFT)
+  pricingTier           PricingTier @default(COMPETITIVE)
+
+  // Pricing
+  totalPrice            Decimal?  @db.Decimal(15, 2)
+  laborCost             Decimal?  @db.Decimal(15, 2)
+  materialCost          Decimal?  @db.Decimal(15, 2)
+  overheadCost          Decimal?  @db.Decimal(15, 2)
+  profitMargin          Float?    // Percentage
+
+  // Documents
+  technicalProposal     String?   @db.Text
+  managementProposal    String?   @db.Text
+  pricingNarrative      String?   @db.Text
+  executiveSummary      String?   @db.Text
+
+  // AI Generation
+  aiGenerated           Boolean   @default(false)
+  aiGeneratedAt         DateTime?
+  aiPromptUsed          String?   @db.Text
+  aiConfidenceScore     Float?
+
+  // Submission
+  submittedAt           DateTime?
+  submissionMethod      String?   // "ELECTRONIC", "MAIL", "IN_PERSON"
+  submissionReference   String?
+
+  // Outcome
+  isAwarded             Boolean   @default(false)
+  awardedAt             DateTime?
+  awardAmount           Decimal?  @db.Decimal(15, 2)
+  feedbackReceived      String?   @db.Text
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  bomItems              BOMItem[]
+  documents             BidDocument[]
+  pastPerformanceRefs   BidPastPerformance[]
+  comments              Comment[]
+  approvalRequests      ApprovalRequest[]
+  versions              BidVersion[]
+
+  @@index([contractId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdById])
+  @@map("bids")
+}
+
+model BOMItem {
+  id                    String    @id @default(cuid())
+  bidId                 String
+  bid                   Bid       @relation(fields: [bidId], references: [id], onDelete: Cascade)
+
+  // Item Details
+  lineNumber            Int
+  category              String?   // "LABOR", "MATERIAL", "EQUIPMENT", "SUBCONTRACT", "OTHER"
+  description           String    @db.Text
+  unit                  String?   // "HOUR", "EACH", "LOT", etc.
+  quantity              Decimal   @db.Decimal(15, 4)
+
+  // Pricing Tiers
+  aggressiveUnitPrice   Decimal   @db.Decimal(15, 4)
+  aggressiveTotalPrice  Decimal   @db.Decimal(15, 2)
+  competitiveUnitPrice  Decimal   @db.Decimal(15, 4)
+  competitiveTotalPrice Decimal   @db.Decimal(15, 2)
+  premiumUnitPrice      Decimal   @db.Decimal(15, 4)
+  premiumTotalPrice     Decimal   @db.Decimal(15, 2)
+
+  // Cost breakdown
+  laborHours            Decimal?  @db.Decimal(10, 2)
+  laborRate             Decimal?  @db.Decimal(10, 2)
+  materialCost          Decimal?  @db.Decimal(15, 2)
+
+  // Metadata
+  notes                 String?   @db.Text
+  vendorQuote           String?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([bidId])
+  @@map("bom_items")
+}
+
+model BidDocument {
+  id                    String    @id @default(cuid())
+  bidId                 String
+  bid                   Bid       @relation(fields: [bidId], references: [id], onDelete: Cascade)
+
+  name                  String
+  documentType          String    // "TECHNICAL", "PRICING", "PAST_PERF", "CERTIFICATIONS", etc.
+  fileType              String?
+  fileSize              Int?
+  url                   String    @db.Text
+  s3Key                 String?
+
+  // Generation info
+  isGenerated           Boolean   @default(false)
+  generatedAt           DateTime?
+  templateUsed          String?
+
+  version               Int       @default(1)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([bidId])
+  @@map("bid_documents")
+}
+
+model BidPastPerformance {
+  id                    String    @id @default(cuid())
+  bidId                 String
+  bid                   Bid       @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  pastPerformanceId     String
+  pastPerformance       PastPerformance @relation(fields: [pastPerformanceId], references: [id], onDelete: Cascade)
+
+  relevanceScore        Float?    // AI-calculated relevance
+  relevanceReason       String?   @db.Text
+  includeInProposal     Boolean   @default(true)
+  orderInProposal       Int       @default(0)
+
+  createdAt             DateTime  @default(now())
+
+  @@unique([bidId, pastPerformanceId])
+  @@index([bidId])
+  @@map("bid_past_performances")
+}
+
+model BidVersion {
+  id                    String    @id @default(cuid())
+  bidId                 String
+  bid                   Bid       @relation(fields: [bidId], references: [id], onDelete: Cascade)
+
+  versionNumber         Int
+  changes               String?   @db.Text
+  snapshot              Json      // Full snapshot of bid at this version
+  createdById           String
+
+  createdAt             DateTime  @default(now())
+
+  @@index([bidId])
+  @@map("bid_versions")
+}
+
+// =============================================================================
+// PAST PERFORMANCE MODELS
+// =============================================================================
+
+model PastPerformance {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Project Information
+  projectName           String
+  contractNumber        String?
+  orderNumber           String?
+
+  // Client Information
+  clientName            String
+  clientAgency          String?
+  clientContactName     String?
+  clientContactTitle    String?
+  clientContactEmail    String?
+  clientContactPhone    String?
+
+  // Project Details
+  description           String    @db.Text
+  scopeOfWork           String?   @db.Text
+
+  // Classification
+  contractType          ContractType?
+  naicsCode             String?
+  pscCode               String?
+
+  // Location
+  location              String?
+  city                  String?
+  state                 String?
+
+  // Financial
+  contractValue         Decimal?  @db.Decimal(15, 2)
+  finalValue            Decimal?  @db.Decimal(15, 2)
+
+  // Timeline
+  startDate             DateTime?
+  endDate               DateTime?
+  completedOnTime       Boolean   @default(true)
+
+  // Performance
+  performanceRating     Float?    // 1-5 scale
+  qualityRating         Float?
+  scheduleRating        Float?
+  costRating            Float?
+  managementRating      Float?
+
+  // Relevance
+  keywords              String[]
+  coreCapabilities      String[]
+
+  // AI Analysis
+  aiSummary             String?   @db.Text
+  aiKeyStrengths        Json?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  photos                PastPerformancePhoto[]
+  documents             PastPerformanceDocument[]
+  bidReferences         BidPastPerformance[]
+
+  @@index([organizationId])
+  @@index([naicsCode])
+  @@map("past_performances")
+}
+
+model PastPerformancePhoto {
+  id                    String    @id @default(cuid())
+  pastPerformanceId     String
+  pastPerformance       PastPerformance @relation(fields: [pastPerformanceId], references: [id], onDelete: Cascade)
+
+  url                   String    @db.Text
+  s3Key                 String?
+  caption               String?
+  isFeatured            Boolean   @default(false)
+  order                 Int       @default(0)
+
+  createdAt             DateTime  @default(now())
+
+  @@index([pastPerformanceId])
+  @@map("past_performance_photos")
+}
+
+model PastPerformanceDocument {
+  id                    String    @id @default(cuid())
+  pastPerformanceId     String
+  pastPerformance       PastPerformance @relation(fields: [pastPerformanceId], references: [id], onDelete: Cascade)
+
+  name                  String
+  documentType          String    // "CPAR", "LETTER_OF_REFERENCE", "AWARD_DOCUMENT", etc.
+  url                   String    @db.Text
+  s3Key                 String?
+
+  createdAt             DateTime  @default(now())
+
+  @@index([pastPerformanceId])
+  @@map("past_performance_documents")
+}
+
+// =============================================================================
+// CALENDAR & EVENT MODELS
+// =============================================================================
+
+model CalendarEvent {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contractId            String?
+  contract              Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  title                 String
+  description           String?   @db.Text
+  eventType             EventType @default(DEADLINE)
+
+  // Timing
+  startDate             DateTime
+  endDate               DateTime?
+  isAllDay              Boolean   @default(false)
+  timezone              String    @default("America/New_York")
+
+  // Recurrence
+  isRecurring           Boolean   @default(false)
+  recurrenceRule        String?   // iCal RRULE format
+
+  // Reminders
+  reminderMinutes       Int[]     // e.g., [10080, 4320, 1440] for 7d, 3d, 1d
+
+  // External sync
+  googleEventId         String?
+  outlookEventId        String?
+
+  // Status
+  isCompleted           Boolean   @default(false)
+  completedAt           DateTime?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  reminders             EventReminder[]
+
+  @@index([userId])
+  @@index([contractId])
+  @@index([startDate])
+  @@map("calendar_events")
+}
+
+model EventReminder {
+  id                    String    @id @default(cuid())
+  eventId               String
+  event                 CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  reminderTime          DateTime
+  channel               NotificationChannel @default(EMAIL)
+  isSent                Boolean   @default(false)
+  sentAt                DateTime?
+
+  createdAt             DateTime  @default(now())
+
+  @@index([eventId])
+  @@index([reminderTime])
+  @@map("event_reminders")
+}
+
+model CalendarIntegration {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+
+  // Google Calendar
+  googleAccessToken     String?   @db.Text
+  googleRefreshToken    String?   @db.Text
+  googleCalendarId      String?
+  googleSyncEnabled     Boolean   @default(false)
+  googleLastSyncAt      DateTime?
+
+  // Microsoft Outlook
+  outlookAccessToken    String?   @db.Text
+  outlookRefreshToken   String?   @db.Text
+  outlookCalendarId     String?
+  outlookSyncEnabled    Boolean   @default(false)
+  outlookLastSyncAt     DateTime?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("calendar_integrations")
+}
+
+// =============================================================================
+// NOTIFICATION MODELS
+// =============================================================================
+
+model Notification {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type                  NotificationType
+  title                 String
+  message               String    @db.Text
+  data                  Json?     // Additional context data
+
+  // Links
+  actionUrl             String?
+  actionText            String?
+
+  // Status
+  isRead                Boolean   @default(false)
+  readAt                DateTime?
+
+  // Delivery
+  channels              NotificationChannel[]
+  emailSentAt           DateTime?
+  pushSentAt            DateTime?
+
+  createdAt             DateTime  @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Channel preferences
+  emailEnabled          Boolean   @default(true)
+  pushEnabled           Boolean   @default(true)
+  smsEnabled            Boolean   @default(false)
+
+  // Type preferences (JSON for flexibility)
+  contractMatchEmail    Boolean   @default(true)
+  contractMatchPush     Boolean   @default(true)
+  deadlineReminderEmail Boolean   @default(true)
+  deadlineReminderPush  Boolean   @default(true)
+  bidStatusEmail        Boolean   @default(true)
+  amendmentEmail        Boolean   @default(true)
+  awardAnnouncementEmail Boolean  @default(true)
+  teamMentionEmail      Boolean   @default(true)
+  teamMentionPush       Boolean   @default(true)
+
+  // Digest preferences
+  dailyDigestEnabled    Boolean   @default(false)
+  dailyDigestTime       String?   // "09:00"
+  weeklyDigestEnabled   Boolean   @default(true)
+  weeklyDigestDay       Int?      // 0=Sunday, 1=Monday, etc.
+  weeklyDigestTime      String?   // "09:00"
+
+  // Quiet hours
+  quietHoursEnabled     Boolean   @default(false)
+  quietHoursStart       String?   // "22:00"
+  quietHoursEnd         String?   // "08:00"
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("notification_preferences")
+}
+
+// =============================================================================
+// COLLABORATION MODELS
+// =============================================================================
+
+model Comment {
+  id                    String    @id @default(cuid())
+  bidId                 String
+  bid                   Bid       @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  content               String    @db.Text
+  mentions              String[]  // User IDs mentioned
+
+  // Threading
+  parentId              String?
+  parent                Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies               Comment[] @relation("CommentReplies")
+
+  // Status
+  isResolved            Boolean   @default(false)
+  resolvedAt            DateTime?
+  resolvedById          String?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([bidId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+model ApprovalRequest {
+  id                    String    @id @default(cuid())
+  bidId                 String
+  bid                   Bid       @relation(fields: [bidId], references: [id], onDelete: Cascade)
+
+  requesterId           String
+  requester             User      @relation("ApprovalRequester", fields: [requesterId], references: [id])
+  approverId            String
+  approver              User      @relation("ApprovalResponder", fields: [approverId], references: [id])
+
+  status                ApprovalStatus @default(PENDING)
+  message               String?   @db.Text
+  response              String?   @db.Text
+
+  requestedAt           DateTime  @default(now())
+  respondedAt           DateTime?
+  dueBy                 DateTime?
+
+  @@index([bidId])
+  @@index([requesterId])
+  @@index([approverId])
+  @@index([status])
+  @@map("approval_requests")
+}
+
+model TeamInvitation {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  email                 String
+  role                  UserRole  @default(MEMBER)
+  invitedById           String
+  token                 String    @unique
+
+  acceptedAt            DateTime?
+  expiresAt             DateTime
+
+  createdAt             DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([token])
+  @@map("team_invitations")
+}
+
+// =============================================================================
+// SUBSCRIPTION & PAYMENT MODELS
+// =============================================================================
+
+model Subscription {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Stripe data
+  stripeCustomerId      String?   @unique
+  stripeSubscriptionId  String?   @unique
+  stripePriceId         String?
+
+  tier                  SubscriptionTier
+  status                SubscriptionStatus @default(ACTIVE)
+
+  // Billing cycle
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  cancelAtPeriodEnd     Boolean   @default(false)
+  canceledAt            DateTime?
+
+  // Trial
+  trialStart            DateTime?
+  trialEnd              DateTime?
+
+  // Usage limits
+  maxUsers              Int       @default(1)
+  maxSavedContracts     Int       @default(10)
+  maxBidsPerMonth       Int       @default(5)
+  maxAIGenerations      Int       @default(10)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([organizationId])
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Stripe data
+  stripePaymentIntentId String?   @unique
+  stripeInvoiceId       String?
+
+  amount                Decimal   @db.Decimal(10, 2)
+  currency              String    @default("usd")
+  status                String    // "succeeded", "pending", "failed"
+
+  description           String?
+  receiptUrl            String?
+
+  createdAt             DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([stripePaymentIntentId])
+  @@map("payments")
+}
+
+model UsageTracking {
+  id                    String    @id @default(cuid())
+  organizationId        String
+
+  // Period
+  periodStart           DateTime
+  periodEnd             DateTime
+
+  // Counts
+  contractsViewed       Int       @default(0)
+  contractsSaved        Int       @default(0)
+  bidsCreated           Int       @default(0)
+  bidsSubmitted         Int       @default(0)
+  aiGenerationsUsed     Int       @default(0)
+  documentsProcessed    Int       @default(0)
+  searchesPerformed     Int       @default(0)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([organizationId, periodStart])
+  @@index([organizationId])
+  @@map("usage_tracking")
+}
+
+// =============================================================================
+// SEARCH & ANALYTICS MODELS
+// =============================================================================
+
+model SavedSearch {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name                  String
+  description           String?
+
+  // Search criteria (stored as JSON for flexibility)
+  criteria              Json
+
+  // Alerts
+  alertEnabled          Boolean   @default(false)
+  alertFrequency        String?   // "IMMEDIATE", "DAILY", "WEEKLY"
+  lastAlertSentAt       DateTime?
+
+  // Usage
+  lastUsedAt            DateTime?
+  useCount              Int       @default(0)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("saved_searches")
+}
+
+model ActivityLog {
+  id                    String    @id @default(cuid())
+  organizationId        String?
+  organization          Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  userId                String?
+  user                  User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action                String    // "CONTRACT_VIEWED", "BID_CREATED", "DOCUMENT_GENERATED", etc.
+  resourceType          String?   // "CONTRACT", "BID", "DOCUMENT", etc.
+  resourceId            String?
+
+  metadata              Json?
+  ipAddress             String?
+  userAgent             String?
+
+  createdAt             DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model ContractAnalytics {
+  id                    String    @id @default(cuid())
+  organizationId        String
+
+  // Time period
+  periodType            String    // "DAILY", "WEEKLY", "MONTHLY"
+  periodStart           DateTime
+  periodEnd             DateTime
+
+  // Metrics
+  contractsDiscovered   Int       @default(0)
+  contractsReviewed     Int       @default(0)
+  bidsPrepared          Int       @default(0)
+  bidsSubmitted         Int       @default(0)
+  bidsWon               Int       @default(0)
+  bidsLost              Int       @default(0)
+
+  // Values
+  totalBidValue         Decimal   @default(0) @db.Decimal(15, 2)
+  totalAwardValue       Decimal   @default(0) @db.Decimal(15, 2)
+
+  // Rates
+  winRate               Float?
+  avgMatchScore         Float?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([organizationId, periodType, periodStart])
+  @@index([organizationId])
+  @@index([periodStart])
+  @@map("contract_analytics")
+}
+
+// =============================================================================
+// API & INTEGRATION MODELS
+// =============================================================================
+
+model ApiKey {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name                  String
+  keyHash               String    @unique  // Hashed API key
+  keyPrefix             String    // First 8 chars for identification
+
+  permissions           String[]  // ["read:contracts", "write:bids", etc.]
+
+  lastUsedAt            DateTime?
+  expiresAt             DateTime?
+  revokedAt             DateTime?
+
+  createdAt             DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model Webhook {
+  id                    String    @id @default(cuid())
+  organizationId        String
+
+  url                   String
+  secret                String
+  events                String[]  // ["contract.matched", "bid.submitted", etc.]
+
+  isActive              Boolean   @default(true)
+
+  lastTriggeredAt       DateTime?
+  failureCount          Int       @default(0)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([organizationId])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id                    String    @id @default(cuid())
+  webhookId             String
+
+  event                 String
+  payload               Json
+
+  // Response
+  statusCode            Int?
+  responseBody          String?   @db.Text
+  responseTimeMs        Int?
+
+  // Status
+  isSuccess             Boolean   @default(false)
+  attemptCount          Int       @default(1)
+  lastAttemptAt         DateTime  @default(now())
+  nextRetryAt           DateTime?
+
+  createdAt             DateTime  @default(now())
+
+  @@index([webhookId])
+  @@index([createdAt])
+  @@map("webhook_deliveries")
+}
