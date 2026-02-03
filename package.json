@@ -1,0 +1,55 @@
+{
+  "name": "govbid-pro",
+  "version": "1.0.0",
+  "description": "AI-Powered Government Contract Bidding Platform",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "scrapers/*",
+    "ai-services/*",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter frontend dev\" \"pnpm --filter backend dev\"",
+    "build": "pnpm --filter backend build && pnpm --filter frontend build",
+    "start": "pnpm --filter backend start",
+    "test": "pnpm --recursive test",
+    "lint": "pnpm --recursive lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "db:migrate": "pnpm --filter backend prisma migrate dev",
+    "db:seed": "pnpm --filter backend prisma db seed",
+    "db:studio": "pnpm --filter backend prisma studio"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "concurrently": "^8.2.2",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/govbid-pro.git"
+  },
+  "keywords": [
+    "government-contracts",
+    "bidding",
+    "ai",
+    "sam-gov",
+    "proposal-automation",
+    "contract-management"
+  ],
+  "author": "GovBid Pro Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yourusername/govbid-pro/issues"
+  },
+  "homepage": "https://github.com/yourusername/govbid-pro#readme"
+}
