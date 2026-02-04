@@ -172,6 +172,14 @@ export type {
   MicrosoftCalendarEvent,
 } from './calendar';
 
+// Webhook configuration
+export {
+  githubWebhookConfig,
+  isGithubEventAllowed,
+  validateGithubWebhookConfig,
+} from './webhooks';
+export type { GithubWebhookConfig } from './webhooks';
+
 // =============================================================================
 // APPLICATION CONFIGURATION
 // =============================================================================

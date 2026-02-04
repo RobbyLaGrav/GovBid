@@ -1,0 +1,221 @@
+openapi: 3.0.3
+info:
+  title: GovBid Pro API
+  version: 0.1.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  uptime:
+                    type: number
+                  timestamp:
+                    type: string
+  /api/auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+  /api/contracts:
+    get:
+      summary: List contracts
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Contract list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractListResponse"
+  /api/webhooks/github:
+    post:
+      summary: Receive a GitHub webhook delivery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Webhook accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSummaryResponse"
+  /api/webhooks/github/events:
+    get:
+      summary: List recent GitHub webhook events
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEventListResponse"
+    delete:
+      summary: Clear stored GitHub webhook events
+      responses:
+        "204":
+          description: Cleared
+  /api/webhooks/github/events/{id}:
+    get:
+      summary: Get a stored GitHub webhook event
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stored event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEventResponse"
+        "404":
+          description: Not found
+components:
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+    ContractListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Contract"
+        meta:
+          type: object
+          properties:
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+    Contract:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        agency:
+          type: string
+        status:
+          type: string
+        dueDate:
+          type: string
+          nullable: true
+    WebhookSummary:
+      type: object
+      properties:
+        message:
+          type: string
+        repo:
+          type: string
+        sender:
+          type: string
+        event:
+          type: string
+        action:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+    WebhookSummaryResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/WebhookSummary"
+    WebhookEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        event:
+          type: string
+        action:
+          type: string
+          nullable: true
+        repository:
+          type: string
+          nullable: true
+        sender:
+          type: string
+          nullable: true
+        deliveredAt:
+          type: string
+        summary:
+          $ref: "#/components/schemas/WebhookSummary"
+    WebhookEventResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/WebhookEvent"
+    WebhookEventListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"

@@ -9,12 +9,12 @@ const formatContext = (context?: LogContext): string => {
 
 export const logger = {
   info(message: string, context?: LogContext) {
-    console.info(`[INFO] ${message}${formatContext(context)}`);
+    console.info(`[sam-gov] ${message}${formatContext(context)}`);
   },
   warn(message: string, context?: LogContext) {
-    console.warn(`[WARN] ${message}${formatContext(context)}`);
+    console.warn(`[sam-gov] ${message}${formatContext(context)}`);
   },
   error(message: string, context?: LogContext) {
-    console.error(`[ERROR] ${message}${formatContext(context)}`);
+    console.error(`[sam-gov] ${message}${formatContext(context)}`);
   }
 };
