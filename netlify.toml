@@ -1,0 +1,9 @@
+[build]
+  base = "frontend"
+  command = "pnpm build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20.18.0"
+  NETLIFY_USE_PNPM = "true"
+  PNPM_VERSION = "9.12.2"

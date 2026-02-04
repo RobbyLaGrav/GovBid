@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "AI-Powered Government Contract Bidding Platform",
   "private": true,
+  "packageManager": "pnpm@9.12.2",
   "workspaces": [
     "frontend",
     "backend",

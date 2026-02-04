@@ -13,11 +13,12 @@ Netlify is a great fit for the frontend because it serves static assets built by
 ## Quick Start (Netlify UI)
 
 1. **Import the GitHub repo** in Netlify.
-2. In **Site settings → Build & deploy → Continuous Deployment**:
+2. Ensure the repository includes the provided `netlify.toml`, which pins Node + pnpm and sets the build base/publish output.
+3. (Optional) If you prefer UI configuration, set the equivalent values under **Site settings → Build & deploy → Continuous Deployment**:
    - **Base directory:** `frontend`
    - **Build command:** `pnpm build`
    - **Publish directory:** `dist`
-3. In **Site settings → Build & deploy → Environment** add the required variables (see below).
+4. In **Site settings → Build & deploy → Environment** add the required variables (see below).
 
 ## Environment Variables (Frontend)
 
@@ -51,4 +52,5 @@ https://your-site.netlify.app
 ## Notes
 
 - Netlify hosts the frontend only; the backend must run elsewhere.
+- The Netlify build uses Node `20.18.0` and pnpm `9.12.2` via `netlify.toml` and `.nvmrc`.
 - If you later add a custom domain, update DNS in Netlify and keep `VITE_API_BASE_URL` pointed at your API domain.
