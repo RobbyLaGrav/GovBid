@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide covers deployment paths for GovBid Pro using Docker Compose, Kubernetes, or Vercel (frontend).
+This guide covers deployment paths for GovBid Pro using Docker Compose, Kubernetes, or a frontend host (Vercel or Netlify).
 
 ## Docker Compose (Recommended for Staging)
 
@@ -39,6 +39,12 @@ kubectl get pods -n govbid
 Use Vercel to deploy the frontend, and host the backend separately. See the detailed guide here:
 
 - [`docs/deployment/vercel.md`](vercel.md)
+
+## Netlify (Frontend Hosting)
+
+Use Netlify to deploy the frontend, and host the backend separately. See the detailed guide here:
+
+- [`docs/deployment/netlify.md`](netlify.md)
 
 ## Database Migrations
 

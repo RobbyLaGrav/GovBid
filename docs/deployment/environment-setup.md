@@ -17,7 +17,7 @@ This document outlines the required environment variables and secrets for GovBid
 | `REDIS_URL` | Redis connection | `redis://localhost:6379` |
 | `MONGODB_URI` | MongoDB connection | `mongodb://user:pass@host:27017/govbid` |
 
-## Frontend (Vercel/Vite)
+## Frontend (Vercel/Netlify/Vite)
 
 | Variable | Description | Example |
 | --- | --- | --- |
