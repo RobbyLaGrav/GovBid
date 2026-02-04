@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authRouter } from "./auth.routes.js";
 
 export const apiRouter = Router();
 
@@ -9,3 +10,5 @@ apiRouter.get("/health", (_req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+apiRouter.use("/auth", authRouter);
