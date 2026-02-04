@@ -1,0 +1,25 @@
+{
+  "name": "@govbid/state-portals-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/coordinator.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/coordinator.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/coordinator.js",
+    "lint": "eslint . --ext .ts",
+    "test": "echo \"No tests configured\""
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "cheerio": "^1.0.0-rc.12",
+    "p-limit": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "eslint": "^8.57.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.3"
+  }
+}

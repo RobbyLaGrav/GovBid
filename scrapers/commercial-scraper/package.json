@@ -1,0 +1,23 @@
+{
+  "name": "@govbid/commercial-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/parser.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/parser.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/parser.js",
+    "lint": "eslint . --ext .ts",
+    "test": "echo \"No tests configured\""
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "eslint": "^8.57.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.3"
+  }
+}
